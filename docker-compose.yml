@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  datadog-rum-proxy-node:
+    build: .
+    container_name: datadog-rum-proxy-node
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3" 
