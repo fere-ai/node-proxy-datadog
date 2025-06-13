@@ -1,0 +1,71 @@
+name: "Staging: Build, Push & Deploy"
+
+on:
+  push:
+    branches:
+      - staging
+  pull_request:
+    branches:
+      - staging
+
+jobs:
+  build-and-push:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - dockerfile: "Dockerfile"
+            repository: "datadog-rum-proxy-staging"
+
+    steps:
+    - name: Check Out Repo
+      uses: actions/checkout@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+
+    - name: Log in to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        AWS_REGION: eu-west-1
+
+    - name: Build, tag, and push image to Amazon ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: ${{ matrix.repository }}
+        IMAGE_TAG: ${{ github.sha }}
+        AWS_REGION: eu-west-1
+      run: |
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG . -f ${{ matrix.dockerfile }}
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+    - name: Deploy Datadog RUM Proxy
+      id: qovery-deploy-proxy
+      env:
+        QOVERY_CLI_ACCESS_TOKEN: ${{ secrets.QOVERY_CLI_ACCESS_TOKEN }}
+      run: |
+        # Download and install Qovery CLI
+        curl -s https://get.qovery.com | bash
+        # Deploy to Staging Container
+        qovery container deploy \
+            --organization "Meroku" \
+            --project "xyz.fereai" \
+            --environment "Staging" \
+            --container "datadog-rum-proxy-staging" \
+            --tag "${GITHUB_SHA}" \
+            --watch
+
+    - name: Clean up old images from ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: ${{ matrix.repository }}
+        AWS_REGION: eu-west-1
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      run: |
+        ls -lash ${{ github.workspace }}
+        ${{ github.workspace }}/scripts/clean_old_images.sh 
