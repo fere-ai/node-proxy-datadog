@@ -3,7 +3,7 @@ name: "Production: Build, Push & Deploy"
 on:
   push:
     branches:
-      - prod
+      - main
 
 jobs:
   build-and-push:
