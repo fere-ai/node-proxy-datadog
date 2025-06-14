@@ -51,7 +51,7 @@ jobs:
             --organization "Meroku" \
             --project "xyz.fereai" \
             --environment "Production" \
-            --container "datadog-rum-proxy-production" \
+            --container "dd-rum-proxy" \
             --tag "${GITHUB_SHA}" \
             --watch
 
@@ -65,4 +65,3 @@ jobs:
       run: |
         ls -lash ${{ github.workspace }}
         ${{ github.workspace }}/scripts/clean_old_images.sh
- 

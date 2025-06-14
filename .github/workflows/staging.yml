@@ -55,7 +55,7 @@ jobs:
             --organization "Meroku" \
             --project "xyz.fereai" \
             --environment "Staging" \
-            --container "datadog-rum-proxy-staging" \
+            --container "dd-rum-proxy" \
             --tag "${GITHUB_SHA}" \
             --watch
 
@@ -68,4 +68,4 @@ jobs:
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       run: |
         ls -lash ${{ github.workspace }}
-        ${{ github.workspace }}/scripts/clean_old_images.sh 
+        ${{ github.workspace }}/scripts/clean_old_images.sh
