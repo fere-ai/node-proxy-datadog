@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - staging
-  pull_request:
-    branches:
-      - staging
 
 jobs:
   build-and-push:
@@ -16,7 +13,7 @@ jobs:
       matrix:
         include:
           - dockerfile: "Dockerfile"
-            repository: "datadog-rum-proxy-staging"
+            repository: "dd-rum-proxy-stag"
 
     steps:
     - name: Check Out Repo
