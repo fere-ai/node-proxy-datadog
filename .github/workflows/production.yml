@@ -12,7 +12,7 @@ jobs:
       matrix:
         include:
           - dockerfile: "Dockerfile"
-            repository: "datadog-rum-proxy-production"
+            repository: "dd-rum-proxy-prod"
 
     steps:
     - name: Check Out Repo

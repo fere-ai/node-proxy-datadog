@@ -13,7 +13,7 @@ jobs:
       matrix:
         include:
           - dockerfile: "Dockerfile"
-            repository: "datadog-rum-proxy-staging"
+            repository: "dd-rum-proxy-stag"
 
     steps:
     - name: Check Out Repo
