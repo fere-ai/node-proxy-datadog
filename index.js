@@ -5,7 +5,14 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 
 // Config
 const PORT = 8080;
-const TARGET = 'https://browser-intake-datadoghq.eu';
+const TARGETS = {
+    datadog: 'https://browser-intake-datadoghq.eu',
+    amplitude: {
+        api: 'https://api2.amplitude.com',
+        cdn: 'https://cdn.amplitude.com',
+        config: 'https://sr-client-cfg.amplitude.com'
+    }
+};
 
 const app = express();
 
@@ -20,22 +27,74 @@ app.get('/health', (req, res) => {
     res.status(200).send('OK');
 });
 
-// Proxy Middleware
-const proxy = createProxyMiddleware({
-    target: TARGET,
+// Datadog Proxy Middleware
+const datadogProxy = createProxyMiddleware({
+    target: TARGETS.datadog,
     changeOrigin: true,
     logLevel: 'debug',
+    pathRewrite: {
+        '^/dd/': '/', // Remove /dd/ prefix when forwarding to Datadog
+    },
     onProxyReq: (proxyReq, req, res) => {
-        // Forward the original host header
-        proxyReq.setHeader('Host', new URL(TARGET).hostname);
-        // Add custom headers if needed
+        proxyReq.setHeader('Host', new URL(TARGETS.datadog).hostname);
         proxyReq.setHeader('X-Forwarded-For', req.ip);
     },
 });
 
-app.use('/', proxy);
+// Amplitude API Proxy Middleware
+const amplitudeApiProxy = createProxyMiddleware({
+    target: TARGETS.amplitude.api,
+    changeOrigin: true,
+    logLevel: 'debug',
+    pathRewrite: {
+        '^/ampli/api/': '/', // Remove /ampli/api/ prefix when forwarding to Amplitude
+    },
+    onProxyReq: (proxyReq, req, res) => {
+        proxyReq.setHeader('Host', new URL(TARGETS.amplitude.api).hostname);
+        proxyReq.setHeader('X-Forwarded-For', req.ip);
+    },
+});
+
+// Amplitude CDN Proxy Middleware (handles ALL cdn.amplitude.com requests)
+const amplitudeCdnProxy = createProxyMiddleware({
+    target: TARGETS.amplitude.cdn,
+    changeOrigin: true,
+    logLevel: 'debug',
+    pathRewrite: {
+        '^/ampli/cdn/': '/', // Remove /ampli/cdn/ prefix when forwarding to Amplitude
+    },
+    onProxyReq: (proxyReq, req, res) => {
+        proxyReq.setHeader('Host', new URL(TARGETS.amplitude.cdn).hostname);
+        proxyReq.setHeader('X-Forwarded-For', req.ip);
+    },
+});
+
+// Amplitude Config Proxy Middleware (handles sr-client-cfg.amplitude.com)
+const amplitudeConfigProxy = createProxyMiddleware({
+    target: TARGETS.amplitude.config,
+    changeOrigin: true,
+    logLevel: 'debug',
+    pathRewrite: {
+        '^/ampli/config/': '/', // Remove /ampli/config/ prefix when forwarding to Amplitude
+    },
+    onProxyReq: (proxyReq, req, res) => {
+        proxyReq.setHeader('Host', new URL(TARGETS.amplitude.config).hostname);
+        proxyReq.setHeader('X-Forwarded-For', req.ip);
+    },
+});
+
+// Route Datadog requests
+app.use('/dd', datadogProxy);
+
+// Route Amplitude requests
+app.use('/ampli/api', amplitudeApiProxy);
+app.use('/ampli/cdn', amplitudeCdnProxy);
+app.use('/ampli/config', amplitudeConfigProxy);
 
 app.listen(PORT, () => {
-    console.log(`Node.js RUM proxy listening on port ${PORT}`);
-    console.log(`Forwarding requests to ${TARGET}`);
+    console.log(`Analytics proxy listening on port ${PORT}`);
+    console.log(`Datadog requests forwarded to ${TARGETS.datadog}`);
+    console.log(`Amplitude API requests forwarded to ${TARGETS.amplitude.api}`);
+    console.log(`Amplitude CDN requests forwarded to ${TARGETS.amplitude.cdn}`);
+    console.log(`Amplitude Config requests forwarded to ${TARGETS.amplitude.config}`);
 }); 
