@@ -22,23 +22,28 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v1
 
-    - name: Log in to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v2
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        AWS_REGION: eu-west-1
+    - name: Authenticate to GCP
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-    - name: Build, tag, and push image to Amazon ECR
-      env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        ECR_REPOSITORY: ${{ matrix.repository }}
-        IMAGE_TAG: ${{ github.sha }}
-        AWS_REGION: eu-west-1
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ vars.GCP_PROJECT_ID }}
+
+    - name: Configure Docker for GCP Artifact Registry
       run: |
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG . -f ${{ matrix.dockerfile }}
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
+
+    - name: Build, tag, and push image to GCP Artifact Registry
+      env:
+        ARTIFACT_REGISTRY: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_REPOSITORY }}
+        IMAGE_TAG: ${{ github.sha }}
+        REPOSITORY_NAME: ${{ matrix.repository }}
+      run: |
+        docker build -t $ARTIFACT_REGISTRY/$REPOSITORY_NAME:$IMAGE_TAG . -f ${{ matrix.dockerfile }}
+        docker push $ARTIFACT_REGISTRY/$REPOSITORY_NAME:$IMAGE_TAG
 
     - name: Deploy Datadog RUM Proxy
       id: qovery-deploy-proxy
@@ -56,13 +61,12 @@ jobs:
             --tag "${GITHUB_SHA}" \
             --watch
 
-    - name: Clean up old images from ECR
+    - name: Clean up old images from GCP Artifact Registry
       env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        ECR_REPOSITORY: ${{ matrix.repository }}
-        AWS_REGION: eu-west-1
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        REPOSITORY_NAME: ${{ matrix.repository }}
+        ARTIFACT_REGISTRY_REPO: ${{ vars.GCP_REPOSITORY }}
+        GCP_REGION: ${{ vars.GCP_REGION }}
       run: |
         ls -lash ${{ github.workspace }}
         ${{ github.workspace }}/scripts/clean_old_images.sh
