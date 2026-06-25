@@ -11,7 +11,8 @@ const TARGETS = {
         api: 'https://api2.amplitude.com',
         cdn: 'https://cdn.amplitude.com',
         config: 'https://sr-client-cfg.amplitude.com'
-    }
+    },
+    customerio: 'https://cdp.customer.io' // US region CDP intake/assets
 };
 
 const app = express();
@@ -83,6 +84,37 @@ const amplitudeConfigProxy = createProxyMiddleware({
     },
 });
 
+// Customer.io CDP Proxy Middleware
+// Strips the leading "/cio" and forwards the remaining path + query verbatim
+// to cdp.customer.io (US region). Method, headers, and raw body are preserved.
+const customerioProxy = createProxyMiddleware({
+    target: TARGETS.customerio,
+    changeOrigin: true,
+    logLevel: 'debug',
+    pathRewrite: {
+        '^/cio/': '/', // Remove /cio/ prefix when forwarding to Customer.io
+        '^/cio$': '/', // Handle bare /cio with no trailing slash
+    },
+    // http-proxy-middleware v3 expects lifecycle hooks under `on`.
+    on: {
+        proxyReq: (proxyReq, req, res) => {
+            proxyReq.setHeader('Host', new URL(TARGETS.customerio).hostname);
+            proxyReq.setHeader('X-Forwarded-For', req.ip);
+        },
+        proxyRes: (proxyRes, req, res) => {
+            // Never cache event intake (POST /cio/v1/*). Allow a short cache
+            // only for idempotent GET asset/settings responses.
+            const reqPath = req.originalUrl || req.url;
+            const isEventIntake = req.method === 'POST' && /^\/cio\/v1\//.test(reqPath);
+            if (isEventIntake) {
+                proxyRes.headers['cache-control'] = 'no-store';
+            } else if (req.method === 'GET' && !proxyRes.headers['cache-control']) {
+                proxyRes.headers['cache-control'] = 'public, max-age=60';
+            }
+        },
+    },
+});
+
 // Route Datadog requests
 app.use('/dd', datadogProxy);
 
@@ -91,10 +123,14 @@ app.use('/ampli/api', amplitudeApiProxy);
 app.use('/ampli/cdn', amplitudeCdnProxy);
 app.use('/ampli/config', amplitudeConfigProxy);
 
+// Route Customer.io requests
+app.use('/cio', customerioProxy);
+
 app.listen(PORT, () => {
     console.log(`Analytics proxy listening on port ${PORT}`);
     console.log(`Datadog requests forwarded to ${TARGETS.datadog}`);
     console.log(`Amplitude API requests forwarded to ${TARGETS.amplitude.api}`);
     console.log(`Amplitude CDN requests forwarded to ${TARGETS.amplitude.cdn}`);
     console.log(`Amplitude Config requests forwarded to ${TARGETS.amplitude.config}`);
+    console.log(`Customer.io requests forwarded to ${TARGETS.customerio}`);
 }); 
